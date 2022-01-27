@@ -866,28 +866,28 @@ describe('useQuery Hook', () => {
           result: { data },
         },
       ];
-  
+
       const cache = new InMemoryCache();
       cache.writeQuery({
         query,
         data: { hello: "world 2" },
       });
-  
+
       const wrapper = ({ children }: any) => (
-        <MockedProvider 
+        <MockedProvider
           mocks={mocks}
-          cache={cache} 
-          defaultOptions={{ watchQuery: { fetchPolicy: "network-only" } }} 
+          cache={cache}
+          defaultOptions={{ watchQuery: { fetchPolicy: "network-only" } }}
         >
           {children}
         </MockedProvider>
       );
-  
+
       const { result, waitForNextUpdate } = renderHook(
         () => useQuery(query),
         { wrapper },
       );
-  
+
       expect(result.current.loading).toBe(true);
       expect(result.current.data).toBe(undefined);
 
@@ -3326,6 +3326,91 @@ describe('useQuery Hook', () => {
 
       expect(result.current.loading).toBe(true);
       expect(result.current.data).toBe(undefined);
+    });
+
+    // TODO: This test isn’t failing yet
+    it.only('should not return partial cache data when `returnPartialData` is false and new variables are passed in', async () => {
+      const cache = new InMemoryCache();
+      const client = new ApolloClient({
+        cache,
+        link: ApolloLink.empty(),
+      });
+
+      const query = gql`
+        query MyCar($id: ID) {
+          car (id: $id) {
+            id
+            make
+          }
+        }
+      `;
+
+      const partialQuery = gql`
+        query MyCar($id: ID) {
+          car (id: $id) {
+            id
+            make
+            model
+          }
+        }
+      `;
+
+      cache.writeQuery({
+        query,
+        variables: { id: 1 },
+        data: {
+          car: {
+            __typename: 'Car',
+            id: 1,
+            make: 'Ford',
+            model: 'Pinto',
+          },
+        },
+      });
+
+      cache.writeQuery({
+        query: partialQuery,
+        variables: { id: 2 },
+        data: {
+          car: {
+            __typename: 'Car',
+            id: 2,
+            make: 'Ford',
+            model: 'Pinto',
+          },
+        },
+      });
+
+      const { result, rerender, waitForNextUpdate } = renderHook(
+        ({ id }) => useQuery(partialQuery, {
+          variables: { id },
+        }),
+        {
+          wrapper: ({ children }) => (
+            <ApolloProvider client={client}>
+              {children}
+            </ApolloProvider>
+          ),
+          initialProps: { id: 2 },
+        },
+      );
+
+      expect(result.current.loading).toBe(false);
+      expect(result.current.data).toEqual({
+        car: {
+          __typename: 'Car',
+          id: 2,
+          make: 'Ford',
+          model: 'Pinto',
+        },
+      });
+
+      rerender({ id: 1 });
+
+      expect(result.current.loading).toBe(true);
+      expect(result.current.data).toBe(undefined);
+
+      waitForNextUpdate;
     });
   });
 
